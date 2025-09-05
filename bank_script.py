@@ -4,16 +4,23 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib import colors
 from PyPDF2 import PdfReader, PdfWriter
 
+# Get page dimensions
+PAGE_WIDTH, PAGE_HEIGHT = LETTER
+print(f"Page dimensions: Width = {PAGE_WIDTH} points, Height = {PAGE_HEIGHT} points")
+print(f"Page dimensions: Width = {PAGE_WIDTH/72:.2f} inches, Height = {PAGE_HEIGHT/72:.2f} inches")
+
 
 # ----------------------------
 # 1. Configuration
 # ----------------------------
-TEMPLATE_PDF = "../bank/td_statement_edited_V3.pdf"
+TEMPLATE_PDF = "../bank/td_statement_edited_V4.pdf"
 OUTPUT_PDF = "../bank/generated_statements/td_chequing_statement.pdf"
 OVERLAY_PDF = "overlay.pdf"
-EXCEL_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v3.xlsx"
+EXCEL_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v4.xlsx"
 FONT_NAME = "Helvetica"
 FONT_SIZE = 8.5
+FONT_SIZE_LARGE = 10
+
 
 
 # Column positions on the PDF (adjust as needed)sstart_x_payee = 50
@@ -27,6 +34,12 @@ line_height = 2.8 * 2.83465  # Convert 3.44mm to points (exact height)
 start_x_total_withdrawal = 305
 start_x_total_deposit = 404
 start_y_total_withdrawal_and_deposit = 793 - 602
+start_x_number_of_transactions, start_y_number_of_transactions = 240, PAGE_HEIGHT - 642
+start_x_transactions_fees, start_y_transactions_fees = 290, PAGE_HEIGHT - 642
+start_x_waived_fees, start_y_waived_fees = 428, PAGE_HEIGHT - 642
+
+# Transaction fees configuration
+FEE_PER_TRANSACTION = 1.25
 GREY_ROW_COORDS = {
     'x1': 66,
     'y1': 298,
@@ -117,6 +130,30 @@ for month in unique_months:
     total_deposit = month_data['Debit'].sum()
     c.drawRightString(start_x_withdrawal, start_y_total_withdrawal_and_deposit, f"{total_withdrawal:,.2f}")
     c.drawRightString(start_x_deposit, start_y_total_withdrawal_and_deposit, f"{total_deposit:,.2f}")
+    
+    # Calculate and display transaction fees
+    number_of_transactions = len(month_data) - 1
+    total_transaction_fees = number_of_transactions * FEE_PER_TRANSACTION
+    transaction_fees_text = f"{number_of_transactions} X{FEE_PER_TRANSACTION}=${total_transaction_fees:.2f}"
+    c.drawRightString(start_x_transactions_fees, start_y_transactions_fees, transaction_fees_text)
+    c.drawRightString(start_x_waived_fees, start_y_waived_fees, f"${total_transaction_fees:.2f}")
+    
+    # Add statement date range at the top
+    # Get the month from the first transaction and create full month boundaries
+    month_start = month_data['Date'].min().replace(day=1)  # First day of the month
+    month_end = (month_start + pd.DateOffset(months=1) - pd.DateOffset(days=1))  # Last day of the month
+    
+    # Format dates as MMM DD/YY
+    first_date_str = month_start.strftime('%b %d/%y').upper()
+    last_date_str = month_end.strftime('%b %d/%y').upper()
+    
+    # Create date range string
+    date_range = f"{first_date_str} - {last_date_str}"
+    
+    # Draw the date range at x=532, y=250
+    c.setFont(FONT_NAME, FONT_SIZE_LARGE)
+    c.drawRightString(532, PAGE_HEIGHT - 250, date_range)
+    c.setFont(FONT_NAME, FONT_SIZE)
 
     # Now process the actual transactions
     for _, row in month_data.iterrows():
