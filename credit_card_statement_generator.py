@@ -77,69 +77,151 @@ def create_transaction_table(data):
     return table
 
 def generate_statement(data, statement_month, statement_year):
-    """Generate PDF statement from transaction data."""
+    """Generate PDF statement from transaction data with multi-page support."""
     # Create month-specific filenames
     month_str = f"{statement_year}_{statement_month:02d}"
     overlay_pdf = f"overlay_credit_card_{month_str}.pdf"
     output_pdf = f"{OUTPUT_DIR}credit_card_statement_{month_str}.pdf"
     
-    # Create overlay PDF with canvas for precise positioning
+    # Pagination configuration
+    PAGE_1_MAX_TRANSACTIONS = 15  # First page (template page 1)
+    PAGE_3_MAX_TRANSACTIONS = 23  # Subsequent pages (template page 3)
+    
+    # Calculate how many pages we need
+    total_transactions = len(data)
+    if total_transactions <= PAGE_1_MAX_TRANSACTIONS:
+        # All transactions fit on page 1
+        overlay_pages_needed = 1
+        page_transactions = [total_transactions]
+    else:
+        # Need page 1 + additional page 3 copies
+        remaining_after_page1 = total_transactions - PAGE_1_MAX_TRANSACTIONS
+        additional_pages = (remaining_after_page1 + PAGE_3_MAX_TRANSACTIONS - 1) // PAGE_3_MAX_TRANSACTIONS  # Ceiling division
+        overlay_pages_needed = 1 + additional_pages
+        
+        # Calculate transactions per page
+        page_transactions = [PAGE_1_MAX_TRANSACTIONS]
+        remaining = remaining_after_page1
+        for i in range(additional_pages):
+            transactions_this_page = min(PAGE_3_MAX_TRANSACTIONS, remaining)
+            page_transactions.append(transactions_this_page)
+            remaining -= transactions_this_page
+    
+    print(f"Total transactions: {total_transactions}")
+    print(f"Pages needed: {overlay_pages_needed}")
+    print(f"Transactions per page: {page_transactions}")
+    
+    # Create overlay PDF with multiple pages
     c = canvas.Canvas(overlay_pdf, pagesize=letter)
     
-    # Table positioning
-    start_x = 47  # Starting x coordinate
-    start_y = letter[1] - 221  # Starting y coordinate (PAGE_HEIGHT - 209)
-    line_height = 22  # Height between rows
+    # Page positioning constants
+    PAGE_1_START_Y = letter[1] - 221  # First page Y position
+    PAGE_3_START_Y = letter[1] - 100  # Page 3 Y position (adjust as needed)
+    LINE_HEIGHT = 22
+    START_X = 47
+    COL_WIDTHS = [95-47, 139-95, 309-139, 346-309]
     
-    # Column widths
-    col_widths = [95-47, 139-95, 309-139, 346-309]  # [48, 44, 170, 37]
-
-    #Beginning Balance
+    # Beginning Balance (only on first page)
     end_x_beginning_balance = 346
     start_y_beginning_balance = letter[1] - 201
     c.setFont("Times-Bold", 10)
-    c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}") 
-
-   
-    y_position = start_y
-    for _, row in data.iterrows():
-        # Format dates
-        date_str = row['Date'].strftime('%b %d').upper()
-        posting_date_str = row['Posting Date'].strftime('%b %d').upper()
+    c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
+    
+    # Process transactions page by page
+    transaction_index = 0
+    
+    for page_num in range(overlay_pages_needed):
+        if page_num > 0:
+            c.showPage()  # Start new page for additional pages
         
-        # Format amount with proper sign and currency
-        amount = row['Amount']
-        if amount < 0:
-            amount_str = f"-${abs(amount):,.2f}"
+        # Determine Y starting position based on page type
+        if page_num == 0:
+            y_position = PAGE_1_START_Y  # First page
+            # Add Beginning Balance only on first page
+            if page_num == 0:
+                c.setFont("Times-Bold", 10)
+                c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
         else:
-            amount_str = f"${amount:,.2f}"
+            y_position = PAGE_3_START_Y  # Page 3 template
         
-        # Set font
-        c.setFont("Times-Roman", 8)
+        # Get transactions for this page
+        transactions_this_page = page_transactions[page_num]
+        page_data = data.iloc[transaction_index:transaction_index + transactions_this_page]
         
-        # Draw dashed line above the row
-        c.setDash([1, 1])  # Small dashed line pattern: 1 point on, 1 point off
-        c.setStrokeColorRGB(139, 0, 0)  # Black color
-        c.setLineWidth(0.3)  # Thinner line width
-        c.line(start_x, y_position + 10, start_x + sum(col_widths), y_position + 10)
-        c.setDash([])  # Reset to solid line
+        print(f"Page {page_num + 1}: Processing {len(page_data)} transactions")
         
-        # Draw each column
-        x_pos = start_x
-        c.drawString(x_pos, y_position, date_str)
-        x_pos += col_widths[0]
-        c.drawString(x_pos, y_position, posting_date_str)
-        x_pos += col_widths[1]
-        c.drawString(x_pos, y_position, str(row['Activity Description']))
-        x_pos += col_widths[2]
-        c.drawRightString(x_pos + col_widths[3], y_position, amount_str)
+        # Draw transactions for this page
+        row_count = 0
+        for _, row in page_data.iterrows():
+            row_count += 1
+            
+            # Format dates
+            date_str = row['Date'].strftime('%b %d').upper()
+            posting_date_str = row['Posting Date'].strftime('%b %d').upper()
+            
+            # Format amount with proper sign and currency
+            amount = row['Amount']
+            if amount < 0:
+                amount_str = f"-${abs(amount):,.2f}"
+            else:
+                amount_str = f"${amount:,.2f}"
+            
+            # Set font
+            c.setFont("Times-Roman", 8)
+            
+            # Draw dashed line above the row
+            c.setDash([1, 1])
+            c.setStrokeColorRGB(139/255, 0, 0)  # Convert to 0-1 scale for RGB
+            c.setLineWidth(0.3)
+            c.line(START_X, y_position + 10, START_X + sum(COL_WIDTHS), y_position + 10)
+            c.setDash([])  # Reset to solid line
+            
+            # Draw each column
+            x_pos = START_X
+            c.drawString(x_pos, y_position, date_str)
+            x_pos += COL_WIDTHS[0]
+            c.drawString(x_pos, y_position, posting_date_str)
+            x_pos += COL_WIDTHS[1]
+            c.drawString(x_pos, y_position, str(row['Activity Description']))
+            x_pos += COL_WIDTHS[2]
+            c.drawRightString(x_pos + COL_WIDTHS[3], y_position, amount_str)
+            
+            # Check if this is the last row on this page
+            if row_count == len(page_data):
+                # Draw solid bottom border for last row
+                c.setDash([])  # Solid line
+                c.setStrokeColorRGB(0, 0, 0)  # Black color
+                if page_num == overlay_pages_needed - 1:  # Last page
+                    c.setLineWidth(1.0)  # Bold line for final page
+                else:
+                    c.setLineWidth(1.0)  # Normal line for continuation pages
+                c.line(START_X, y_position - 5, START_X + sum(COL_WIDTHS), y_position - 5)
+                
+                # Add "Continued" or final balance information
+                if page_num == overlay_pages_needed - 1:  # Last page
+                    # Add TOTAL NEW BALANCE
+                    balance_y = y_position - 15  # 4 pts below last row
+                    activity_x = START_X + COL_WIDTHS[0] + COL_WIDTHS[1]  # Activity description x-axis
+                    amount_x = START_X + sum(COL_WIDTHS)  # Amount x-axis
+                    
+                    c.setFont("Times-Bold", 10)
+                    c.drawString(activity_x, balance_y, "TOTAL NEW BALANCE")
+                    c.drawRightString(amount_x, balance_y, f"${data['Closing Balance'].iloc[-1]:,.2f}")
+                else:
+                    # Add "Continued" text
+                    continued_y = y_position - 15  # 4 pts below last row
+                    continued_x = START_X + sum(COL_WIDTHS)  # Right aligned at end of row width
+                    
+                    c.setFont("Times-Roman", 8)
+                    c.drawRightString(continued_x, continued_y, "Continued")
+            
+            # Move to next row
+            y_position -= LINE_HEIGHT
         
-
-        # Move to next row
-        y_position -= line_height
+        # Update transaction index for next page
+        transaction_index += transactions_this_page
     
     c.save()
-    
     print(f"Overlay PDF created: {overlay_pdf}")
     
     # Merge overlay with template PDF
@@ -148,15 +230,29 @@ def generate_statement(data, statement_month, statement_year):
         overlay = PdfReader(overlay_pdf)
         writer = PdfWriter()
 
-        # Merge each page
-        for template_page_number in range(len(template.pages)):
-            page = template.pages[template_page_number]
-            
-            # If overlay has multiple pages, cycle through them
-            if template_page_number == 0 and len(overlay.pages) > 0:
-                page.merge_page(overlay.pages[0])
-            
-            writer.add_page(page)
+        # Determine final document structure
+        template_page_1 = template.pages[0]  # First page of template
+        template_page_2 = template.pages[1] if len(template.pages) > 1 else None  # Second page of template
+        template_page_3 = template.pages[2] if len(template.pages) > 2 else None  # Third page of template
+        
+        # Add first page (always page 1 of template with first overlay)
+        page_1 = template_page_1
+        if len(overlay.pages) > 0:
+            page_1.merge_page(overlay.pages[0])
+        writer.add_page(page_1)
+        
+        # Add second page of template (unchanged)
+        if template_page_2:
+            writer.add_page(template_page_2)
+        
+        # Add remaining pages (page 3 template with additional overlays)
+        for overlay_page_num in range(1, len(overlay.pages)):
+            if template_page_3:
+                # Create a copy of template page 3
+                page_3_copy = template_page_3
+                # Merge with corresponding overlay page
+                page_3_copy.merge_page(overlay.pages[overlay_page_num])
+                writer.add_page(page_3_copy)
 
         # Create output directory if it doesn't exist
         import os
@@ -170,6 +266,7 @@ def generate_statement(data, statement_month, statement_year):
     except Exception as e:
         print(f"Error merging PDFs: {e}")
         print(f"Make sure {TEMPLATE_PDF} exists in the current directory")
+
 def generate_monthly_statements(data):
     """
     Generate credit card statements for all months that have transaction data.
@@ -218,6 +315,7 @@ def generate_monthly_statements(data):
             current_year += 1
         else:
             current_month += 1
+
 def generate_transaction_data(data, statement_month, statement_year):
     """
     Process transaction data from Excel file and format for credit card statement.
