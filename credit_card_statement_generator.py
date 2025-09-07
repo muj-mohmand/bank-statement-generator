@@ -139,8 +139,11 @@ def generate_statement(data, statement_month, statement_year):
             y_position = PAGE_1_START_Y  # First page
             # Add Beginning Balance only on first page
             if page_num == 0:
-                c.setFont("Times-Bold", 10)
+                c.setFont("Helvetica-Bold", 10)
                 c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
+                c.drawRightString(577, letter[1] - 438, f"${data['Beginning Balance'].iloc[0]:,.2f}")
+                c.setFontSize(12)
+                c.drawRightString(308, letter[1] - 597, f"${data['Beginning Balance'].iloc[0]:,.2f}")
         else:
             y_position = PAGE_3_START_Y  # Page 3 template
         
@@ -152,6 +155,8 @@ def generate_statement(data, statement_month, statement_year):
         
         # Draw transactions for this page
         row_count = 0
+        total_payments_credits = 0.0
+        total_purchases_and_charges = 0.0
         for _, row in page_data.iterrows():
             row_count += 1
             
@@ -163,8 +168,10 @@ def generate_statement(data, statement_month, statement_year):
             amount = row['Amount']
             if amount < 0:
                 amount_str = f"-${abs(amount):,.2f}"
+                total_payments_credits += abs(amount)
             else:
                 amount_str = f"${amount:,.2f}"
+                total_purchases_and_charges += amount
             
             # Set font
             c.setFont("Times-Roman", 8)
@@ -217,7 +224,15 @@ def generate_statement(data, statement_month, statement_year):
             
             # Move to next row
             y_position -= LINE_HEIGHT
-        
+        #update payements and credits on first page
+        if page_num == 0:
+            c.setFont("Helvetica-Bold", 10)
+            c.drawRightString(577, letter[1] - 452, "${:,.2f}".format(total_payments_credits))
+            c.setFont("Helvetica", 8)
+            c.drawRightString(577, letter[1]-464, "${:,.2f}".format(total_purchases_and_charges))
+            c.setFont("Helvetica-Bold", 8)
+            c.drawRightString(577, letter[1]- 510, "${:,.2f}".format(total_purchases_and_charges))
+
         # Update transaction index for next page
         transaction_index += transactions_this_page
     
