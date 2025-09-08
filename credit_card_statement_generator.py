@@ -13,11 +13,12 @@ from reportlab.lib.pagesizes import LETTER, letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle
 from PyPDF2 import PdfReader, PdfWriter
+from copy import deepcopy
 
 # Configuration
-INPUT_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v6.xlsx"
+INPUT_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v7.xlsx"
 OUTPUT_DIR = "credit_card_statements/"
-TEMPLATE_PDF = "TD_GREEN_VISA_template_long.pdf"
+TEMPLATE_PDF = "template/TD_GREEN_VISA_template_edited.pdf"
 
 #company details
 COMPANY_NAME = "BrightDesk Consulting"
@@ -84,7 +85,7 @@ def generate_statement(data, statement_month, statement_year):
     output_pdf = f"{OUTPUT_DIR}credit_card_statement_{month_str}.pdf"
     
     # Pagination configuration
-    PAGE_1_MAX_TRANSACTIONS = 15  # First page (template page 1)
+    PAGE_1_MAX_TRANSACTIONS = 14  # First page (template page 1)
     PAGE_3_MAX_TRANSACTIONS = 23  # Subsequent pages (template page 3)
     
     # Calculate how many pages we need
@@ -116,7 +117,7 @@ def generate_statement(data, statement_month, statement_year):
     
     # Page positioning constants
     PAGE_1_START_Y = letter[1] - 221  # First page Y position
-    PAGE_3_START_Y = letter[1] - 100  # Page 3 Y position (adjust as needed)
+    PAGE_3_START_Y = letter[1] - 190  # Page 3 Y position (adjust as needed)
     LINE_HEIGHT = 22
     START_X = 47
     COL_WIDTHS = [95-47, 139-95, 309-139, 346-309]
@@ -124,8 +125,8 @@ def generate_statement(data, statement_month, statement_year):
     # Beginning Balance (only on first page)
     end_x_beginning_balance = 346
     start_y_beginning_balance = letter[1] - 201
-    c.setFont("Times-Bold", 10)
-    c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
+    # c.setFont("Times-Bold", 10)
+    # c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
     
     # Process transactions page by page
     transaction_index = 0
@@ -143,7 +144,14 @@ def generate_statement(data, statement_month, statement_year):
                 c.drawRightString(end_x_beginning_balance, start_y_beginning_balance, f"${data['Beginning Balance'].iloc[0]:,.2f}")
                 c.drawRightString(577, letter[1] - 438, f"${data['Beginning Balance'].iloc[0]:,.2f}")
                 c.setFontSize(12)
-                c.drawRightString(308, letter[1] - 597, f"${data['Beginning Balance'].iloc[0]:,.2f}")
+                c.drawRightString(308, letter[1] - 597, f"${data['Closing Balance'].iloc[-1]:,.2f}")
+                c.setFontSize(12)
+                c.drawRightString(577, letter[1] - 522, f"${data['Closing Balance'].iloc[-1]:,.2f}")
+                c.setFont("Times-Bold", 8)
+                c.drawString(138, letter[1] - 135, f"{data.attrs['statement_date'].strftime('%B %d, %Y')}")
+                c.setFont("Times-Roman", 8)
+                c.drawString(140, letter[1] - 149, f"{data.attrs['previous_statement_date'].strftime('%B %d, %Y')}")
+                c.drawString(131, letter[1] - 161, f"{data.attrs['statement_period_start'].strftime('%B %d, %Y')} - {data.attrs['statement_period_end'].strftime('%B %d, %Y')}")
         else:
             y_position = PAGE_3_START_Y  # Page 3 template
         
@@ -177,10 +185,11 @@ def generate_statement(data, statement_month, statement_year):
             c.setFont("Times-Roman", 8)
             
             # Draw dashed line above the row
-            c.setDash([1, 1])
-            c.setStrokeColorRGB(139/255, 0, 0)  # Convert to 0-1 scale for RGB
-            c.setLineWidth(0.3)
-            c.line(START_X, y_position + 10, START_X + sum(COL_WIDTHS), y_position + 10)
+            if row_count > 1:
+                c.setDash([1, 1])
+                c.setStrokeColorRGB(139/255, 0, 0)  # Convert to 0-1 scale for RGB
+                c.setLineWidth(0.3)
+                c.line(START_X, y_position + 10, START_X + sum(COL_WIDTHS), y_position + 10)
             c.setDash([])  # Reset to solid line
             
             # Draw each column
@@ -232,6 +241,12 @@ def generate_statement(data, statement_month, statement_year):
             c.drawRightString(577, letter[1]-464, "${:,.2f}".format(total_purchases_and_charges))
             c.setFont("Helvetica-Bold", 8)
             c.drawRightString(577, letter[1]- 510, "${:,.2f}".format(total_purchases_and_charges))
+        else:
+            c.setFont("Times-Bold", 8)
+            c.drawString(138, letter[1] - 135, f"{data.attrs['statement_date'].strftime('%B %d, %Y')}")
+            c.setFont("Times-Roman", 8)
+            c.drawString(140, letter[1] - 149, f"{data.attrs['previous_statement_date'].strftime('%B %d, %Y')}")
+
 
         # Update transaction index for next page
         transaction_index += transactions_this_page
@@ -264,7 +279,7 @@ def generate_statement(data, statement_month, statement_year):
         for overlay_page_num in range(1, len(overlay.pages)):
             if template_page_3:
                 # Create a copy of template page 3
-                page_3_copy = template_page_3
+                page_3_copy = deepcopy(template_page_3)
                 # Merge with corresponding overlay page
                 page_3_copy.merge_page(overlay.pages[overlay_page_num])
                 writer.add_page(page_3_copy)
