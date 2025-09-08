@@ -87,6 +87,12 @@ def generate_statement(data, statement_month, statement_year):
     # Pagination configuration
     PAGE_1_MAX_TRANSACTIONS = 14  # First page (template page 1)
     PAGE_3_MAX_TRANSACTIONS = 23  # Subsequent pages (template page 3)
+    #calculate total payments and credits
+    total_payments_credits = abs(data[data["Amount"] < 0]["Amount"].sum())
+    total_purchases_and_charges = data[data["Amount"] > 0]["Amount"].sum()
+    credit_limit = 10000
+    total_credit_available = credit_limit - (data['Closing Balance'].iloc[-1] if len(data) > 0 else 0)
+
     
     # Calculate how many pages we need
     total_transactions = len(data)
@@ -152,6 +158,20 @@ def generate_statement(data, statement_month, statement_year):
                 c.setFont("Times-Roman", 8)
                 c.drawString(140, letter[1] - 149, f"{data.attrs['previous_statement_date'].strftime('%B %d, %Y')}")
                 c.drawString(131, letter[1] - 161, f"{data.attrs['statement_period_start'].strftime('%B %d, %Y')} - {data.attrs['statement_period_end'].strftime('%B %d, %Y')}")
+                c.setFont("Helvetica", 8)
+                c.drawRightString(582, letter[1]- 147, f"${total_credit_available:,.2f}")
+                minimum_payment_due = min(10, round(data['Closing Balance'].iloc[-1], 2) )
+
+                if minimum_payment_due > 0:
+                    due_date = data.attrs['statement_date'] + timedelta(days=21)
+                    c.setFont("Helvetica-Bold", 10)
+                    c.drawRightString(583, letter[1] - 111, "${:,.2f}".format(minimum_payment_due))
+                    c.drawRightString(396, letter[1] - 597, "${:,.2f}".format(minimum_payment_due))
+                    c.drawRightString(488, letter[1] - 597, due_date.strftime('%b. %d, %Y'))
+                    c.setFont("Helvetica", 8)
+                    c.drawRightString(583, letter[1] - 124, due_date.strftime('%B %d, %Y'))
+                 
+                    
         else:
             y_position = PAGE_3_START_Y  # Page 3 template
         
@@ -163,8 +183,7 @@ def generate_statement(data, statement_month, statement_year):
         
         # Draw transactions for this page
         row_count = 0
-        total_payments_credits = 0.0
-        total_purchases_and_charges = 0.0
+        
         for _, row in page_data.iterrows():
             row_count += 1
             
@@ -176,10 +195,8 @@ def generate_statement(data, statement_month, statement_year):
             amount = row['Amount']
             if amount < 0:
                 amount_str = f"-${abs(amount):,.2f}"
-                total_payments_credits += abs(amount)
             else:
                 amount_str = f"${amount:,.2f}"
-                total_purchases_and_charges += amount
             
             # Set font
             c.setFont("Times-Roman", 8)
@@ -187,7 +204,7 @@ def generate_statement(data, statement_month, statement_year):
             # Draw dashed line above the row
             if row_count > 1:
                 c.setDash([1, 1])
-                c.setStrokeColorRGB(139/255, 0, 0)  # Convert to 0-1 scale for RGB
+                c.setStrokeColorRGB(0, 0, 0)  # Convert to 0-1 scale for RGB
                 c.setLineWidth(0.3)
                 c.line(START_X, y_position + 10, START_X + sum(COL_WIDTHS), y_position + 10)
             c.setDash([])  # Reset to solid line
