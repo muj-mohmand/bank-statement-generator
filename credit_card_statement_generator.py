@@ -16,7 +16,7 @@ from PyPDF2 import PdfReader, PdfWriter
 from copy import deepcopy
 
 # Configuration
-INPUT_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v7.xlsx"
+INPUT_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v11.xlsx"
 OUTPUT_DIR = "credit_card_statements/"
 TEMPLATE_PDF = "template/TD_GREEN_VISA_template_edited.pdf"
 

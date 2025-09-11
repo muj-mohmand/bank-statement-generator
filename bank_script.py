@@ -16,7 +16,7 @@ print(f"Page dimensions: Width = {PAGE_WIDTH/72:.2f} inches, Height = {PAGE_HEIG
 TEMPLATE_PDF = "../bank/td_statement_edited_V4.pdf"
 OUTPUT_PDF = "../bank/generated_statements/td_chequing_statement.pdf"
 OVERLAY_PDF = "overlay.pdf"
-EXCEL_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v4.xlsx"
+EXCEL_FILE = "../../BrightDesk_Consulting_Ledger_Mar2022_to_Aug2025_v11.xlsx"
 FONT_NAME = "Helvetica"
 FONT_SIZE = 8.5
 FONT_SIZE_LARGE = 10
@@ -50,7 +50,7 @@ GREY_ROW_COORDS = {
 # ----------------------------
 # 2. Load Excel Transactions
 # ----------------------------
-df = pd.read_excel(EXCEL_FILE, sheet_name='chequing_savings_credit')
+df = pd.read_excel(EXCEL_FILE, sheet_name='chequing')
 print(df.head())
 
 # Filter for Chequing Account only
@@ -192,7 +192,7 @@ for month in unique_months:
         c.setFillColorRGB(0, 0, 0)
         
         # Draw transaction data in new order with adjusted y position
-        c.drawString(start_x_payee, y, str(row['Payee']))
+        c.drawString(start_x_payee, y, str(row['Payee'])[:25])  # Limit to 25 characters
 
         # Format numbers with thousands separators and 2 decimal places
         withdrawal = f"{row['Credit']:,.2f}" if pd.notnull(row['Credit']) and row['Credit'] > 0 else ""
